@@ -9,17 +9,26 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Calclab">
 
+        <!-- ✅ 1) 런처는 SplashActivity 하나만 -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
             android:theme="@style/Theme.Calclab.Splash">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
+
+        <!-- ✅ 2) LoginActivity 등록 -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false" />
+
+        <!-- ✅ 3) MainActivity는 런처가 아님 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
 
     </application>
 
