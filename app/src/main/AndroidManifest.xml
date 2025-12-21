@@ -9,26 +9,28 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Calclab">
 
-        <!-- ✅ 1) 런처는 SplashActivity 하나만 -->
+        <!-- 런처는 SplashActivity -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.Calclab.Splash">
+            android:theme="@style/Theme.Calclab.NoBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- ✅ 2) LoginActivity 등록 -->
+        <!-- (임시) 로그인 -->
         <activity
             android:name=".LoginActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.Calclab.NoBar" />
 
-        <!-- ✅ 3) MainActivity는 런처가 아님 -->
+        <!-- 메인 화면도 타이틀바 강제 제거 -->
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.Calclab.NoBar" />
 
     </application>
 

@@ -1,24 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- 앱 기본 테마 -->
-    <style name="Theme.Calclab" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- 필요하면 나중에 색/타이포 추가 -->
+    <!-- 앱 기본 테마(Compose용). 여기선 최소만 둠 -->
+    <style name="Theme.Calclab" parent="android:Theme.Light.NoTitleBar">
+        <!-- 필요시 앱 전체 배경색 -->
+        <item name="android:windowBackground">@android:color/white</item>
     </style>
 
-    <!-- 스플래시 전용 테마 (Android 12+ SplashScreen API) -->
-    <style name="Theme.Calclab.Splash" parent="Theme.SplashScreen">
-        <!-- 배경색 -->
-        <item name="windowSplashScreenBackground">@android:color/white</item>
-
-        <!-- 스플래시 중앙 아이콘 (지금은 런처 아이콘으로) -->
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-
-        <!-- 애니메이션 시간(밀리초) -->
-        <item name="windowSplashScreenAnimationDuration">700</item>
-
-        <!-- 스플래시 끝난 뒤 적용될 테마 -->
-        <item name="postSplashScreenTheme">@style/Theme.Calclab</item>
+    <!-- ✅ 타이틀바/액션바 완전 제거용(스플래시/로그인/메인에 강제 적용) -->
+    <style name="Theme.Calclab.NoBar" parent="android:Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowFullscreen">true</item>
     </style>
 
 </resources>
+
