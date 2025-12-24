@@ -1,27 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- 🔥 앱 전체 기본 테마 (런처 직후 검정 제거용) -->
-    <style name="Theme.Calclab.App" parent="android:Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:windowIsTranslucent">false</item>
-        <item name="android:windowFullscreen">false</item>
+    <!-- 앱 기본 테마 (필요 최소) -->
+    <style name="Theme.Calclab" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- 기본값만 -->
     </style>
 
-    <!-- 일반 화면용 -->
-    <style name="Theme.Calclab.NoBar" parent="android:Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:windowIsTranslucent">false</item>
-        <item name="android:windowFullscreen">false</item>
+    <!-- 스플래시 전용 테마 (배경/상태바는 프로젝트 기존에 맞게 조정 가능) -->
+    <style name="Theme.Calclab.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- 스플래시가 이미 완성 고정이라면 여기 건드리지 말고,
+             기존에 쓰던 splash 테마가 따로 있으면 그걸로 바꿔도 됨 -->
     </style>
 
-    <!-- 스플래시 전용 -->
-    <style name="Theme.Calclab.Splash" parent="android:Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:statusBarColor">@android:color/white</item>
-        <item name="android:navigationBarColor">@android:color/white</item>
-        <item name="android:windowIsTranslucent">false</item>
-        <item name="android:windowFullscreen">false</item>
+    <!-- ✅ MainActivity(WebView + XML + AppCompatActivity) 전용 테마 -->
+    <style name="Theme.Calclab.Main" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- AppCompatActivity 크래시 방지용 -->
     </style>
 
 </resources>

@@ -1,23 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- WebView/네트워크 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Calclab.App">
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.Calclab">
 
+        <!-- ✅ AdMob App ID (테스트용) : 배너만 써도 넣어두는 게 안전 -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
 
+        <!-- ✅ 런처: 스플래시 (절대 수정 금지 영역 유지) -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Calclab.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,15 +31,19 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".LoginActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Calclab.NoBar" />
-
+        <!-- ✅ 문제의 핵심: MainActivity는 AppCompat 테마로 강제 -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:theme="@style/Theme.Calclab.NoBar" />
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Calclab.Main" />
+
+        <!-- (프로젝트에 존재하길래 포함) -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Calclab.Main" />
 
     </application>
 

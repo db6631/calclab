@@ -1,23 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:ads="http://schemas.android.com/apk/res-auto"
-    android:orientation="vertical"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- WebView (앱 화면 전체 차지) -->
     <WebView
         android:id="@+id/calclabWebView"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        ads:layout_constraintTop_toTopOf="parent"
+        ads:layout_constraintBottom_toTopOf="@id/bannerContainer"
+        ads:layout_constraintStart_toStartOf="parent"
+        ads:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- AdMob 배너 광고 (하단 고정) -->
-    <com.google.android.gms.ads.AdView
-        android:id="@+id/bannerAdView"
-        android:layout_width="match_parent"
+    <FrameLayout
+        android:id="@+id/bannerContainer"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        ads:adSize="BANNER"
-        ads:adUnitId="ca-app-pub-3940256099942544/9214589741" />
+        android:paddingBottom="0dp"
+        ads:layout_constraintBottom_toBottomOf="parent"
+        ads:layout_constraintStart_toStartOf="parent"
+        ads:layout_constraintEnd_toEndOf="parent">
 
-</LinearLayout>
+        <com.google.android.gms.ads.AdView
+            android:id="@+id/bannerAdView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            ads:adSize="BANNER"
+            ads:adUnitId="ca-app-pub-3940256099942544/9214589741" />
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

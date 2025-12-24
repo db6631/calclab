@@ -2,11 +2,16 @@ package kr.calclab.app
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
@@ -14,44 +19,72 @@ import com.google.android.gms.ads.MobileAds
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
-    private var bannerAdView: AdView? = null   // ❗ nullable 로 변경해서 크래시 방지
+    private lateinit var adView: AdView
+    private lateinit var bannerContainer: View
+
+    private val firstUrl = "https://calclab.kr/login/?app=1"
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // 1) WebView 연결
+        val root = findViewById<View>(R.id.root)
+        bannerContainer = findViewById(R.id.bannerContainer)
+
         webView = findViewById(R.id.calclabWebView)
+        adView = findViewById(R.id.bannerAdView)
 
-        // 2) WebView 설정
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
-        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        // ✅ (핵심) 네비게이션 바 안전영역만큼 배너를 위로 올림
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            bannerContainer.setPadding(
+                bannerContainer.paddingLeft,
+                bannerContainer.paddingTop,
+                bannerContainer.paddingRight,
+                navBars.bottom
+            )
+            insets
+        }
 
-        // User-Agent 에서 ; wv 제거 (앱 모드 유지)
-        val ua = settings.userAgentString
-        settings.userAgentString = ua.replace("; wv", "")
+        // ✅ WebView (v1.1)
+        val s = webView.settings
+        s.javaScriptEnabled = true
+        s.domStorageEnabled = true
+        s.cacheMode = WebSettings.LOAD_DEFAULT
+        s.useWideViewPort = true
+        s.loadWithOverviewMode = true
+        s.mediaPlaybackRequiresUserGesture = false
+        s.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        cm.setAcceptThirdPartyCookies(webView, true)
+
+        val ua = s.userAgentString ?: ""
+        s.userAgentString = ua.replace("; wv", "")
 
         webView.webChromeClient = WebChromeClient()
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {}
 
-        // 3) 앱 모드 URL 로드 (?app=1 고정)
-        webView.loadUrl("https://calclab.kr/login/?app=1")
+        if (savedInstanceState == null) webView.loadUrl(firstUrl)
+        else webView.restoreState(savedInstanceState)
 
-        // 4) 광고 초기화/로딩은 예외 나도 앱이 안 죽게 runCatching 으로 감쌈
-        runCatching {
-            // AdMob SDK 초기화
-            MobileAds.initialize(this)
+        // ✅ AdMob 배너
+        MobileAds.initialize(this)
+        adView.loadAd(AdRequest.Builder().build())
 
-            // 배너 뷰 찾기 (없으면 null)
-            bannerAdView = findViewById(R.id.bannerAdView)
+        // ✅ 최신 뒤로가기
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) webView.goBack()
+                else finish()
+            }
+        })
+    }
 
-            // 테스트 배너 요청
-            val adRequest = AdRequest.Builder().build()
-            bannerAdView?.loadAd(adRequest)   // null 이면 그냥 무시 → 앱은 계속 동작
-        }
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView.saveState(outState)
     }
 }
