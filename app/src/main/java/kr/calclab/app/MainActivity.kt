@@ -1,5 +1,6 @@
 package kr.calclab.app
 
+import android.app.AlertDialog
 import android.graphics.Color
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -9,16 +10,25 @@ import android.view.ViewTreeObserver
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.nativead.MediaView
+import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdView
 import com.kakao.sdk.user.UserApiClient
 import java.net.URLEncoder
 
@@ -26,23 +36,28 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
 
+    // ===== Banner =====
     private var bannerContainer: FrameLayout? = null
     private var bannerAdView: AdView? = null
     private var bannerSizedOnce = false
+    private var bannerRetryCount = 0
     private var globalLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
 
-    // ✅ 로그인 페이지 (앱용)
+    // ===== Exit Native =====
+    private var exitNativeAd: NativeAd? = null
+    private var exitDialog: AlertDialog? = null
+
+    // ===== App state =====
+    private var isCalculatorMain = false
+
+    // ===== URLs =====
     private val loginUrl = "https://calclab.kr/login/?app=1"
-
-    // ✅ 로그인 성공 후 서버가 리다이렉트 시켜야 하는 페이지(앱용)
-    // (서버 스니펫의 $redirect도 이걸로 맞춰야 함)
     private val afterLoginUrl = "https://calclab.kr/계산기-메인/?app=1"
-
-    // ✅ WP 쿠키 발급 엔드포인트
     private val appLoginEndpoint = "https://calclab.kr/app-login"
 
-    // ✅ 실제 하단 배너 광고 단위ID
+    // ===== Ad Unit IDs =====
     private val bannerUnitId = "ca-app-pub-7013375748998728/4437911137"
+    private val exitNativeUnitId = "ca-app-pub-7013375748998728/9976058712"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,10 +66,9 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.calclabWebView)
         bannerContainer = findViewById(R.id.bannerContainer)
 
-        // 배너 컨테이너 배경 때문에 "흰 띠" 보이는 경우가 많아서 투명 처리
         bannerContainer?.setBackgroundColor(Color.TRANSPARENT)
 
-        // ✅ 시스템바(네비게이션바) 영역만큼 아래 padding 반영 → “하단 시스템 윈도우에 박힘” 방지
+        // 하단 제스처 영역만큼 배너 패딩
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { _, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             bannerContainer?.setPadding(0, 0, 0, sys.bottom)
@@ -62,10 +76,48 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupWebView()
+
+        // ✅ 배너는 여기서 1번 확실히 로드 시도
         setupAdMobAdaptiveBanner()
 
-        // 로그인 페이지 로드
+        // ✅ 종료 네이티브 미리 로드
+        preloadExitNativeAd()
+
+        // ✅ 첫 화면
         webView.loadUrl(loginUrl)
+
+        // ✅ 뒤로가기: 메인에서만 종료 다이얼로그
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val urlNow = try { webView.url ?: "" } catch (_: Exception) { "" }
+
+                val isMainByUrl =
+                    urlNow.contains("/계산기-메인/") ||
+                            urlNow.contains("/%EA%B3%84%EC%82%B0%EA%B8%B0-%EB%A9%94%EC%9D%B8/") ||
+                            urlNow.contains("%EA%B3%84%EC%82%B0%EA%B8%B0-%EB%A9%94%EC%9D%B8")
+
+                val isMain = isCalculatorMain || isMainByUrl
+
+                Log.d("CALCLAB_BACK", "url=$urlNow, isFlag=$isCalculatorMain, isMainByUrl=$isMainByUrl, isMain=$isMain")
+
+                if (isMain) {
+                    showExitDialog()
+                } else if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // ✅ 배너가 어떤 이유로든 null이면 복구 시도 (배너 “쭉 안 나옴” 방지)
+        if (bannerAdView == null) {
+            Log.d("ADMOB_BANNER", "onResume: bannerAdView null -> retry setup")
+            setupAdMobAdaptiveBanner()
+        }
     }
 
     private fun setupWebView() {
@@ -73,33 +125,39 @@ class MainActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
 
         webView.webViewClient = object : WebViewClient() {
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-
-                // ✅ 로그인 버튼 딥링크 → 네이티브 카카오 로그인 실행
                 if (url.startsWith("calclab://kakao-login")) {
                     startKakaoNativeLogin()
                     return true
                 }
                 return false
             }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+
+                // 웹에서 window.CALCLAB_APP.page = "calculator-main" 세팅하면 더 정확
+                webView.evaluateJavascript(
+                    "window.CALCLAB_APP && window.CALCLAB_APP.page ? window.CALCLAB_APP.page : ''"
+                ) { result ->
+                    val page = result.replace("\"", "")
+                    isCalculatorMain = (page == "calculator-main")
+                    Log.d("CALCLAB_FLAG", "url=$url, pageFlag=$page, isMain=$isCalculatorMain")
+                }
+            }
         }
     }
 
+    // ===== Kakao Login =====
     private fun startKakaoNativeLogin() {
         val talkAvailable = UserApiClient.instance.isKakaoTalkLoginAvailable(this)
-        Log.d("KAKAO_LOGIN", "talkAvailable=$talkAvailable")
 
         if (talkAvailable) {
-            UserApiClient.instance.loginWithKakaoTalk(this) { token, error ->
-                Log.d("KAKAO_LOGIN", "loginWithKakaoTalk token=${token != null}, error=$error")
-                if (token != null) {
-                    // ✅ 여기서 “동의항목(스코프)” 체크 후 서버로 POST
-                    ensureScopesThenPostToServer(token.accessToken)
-                } else {
-                    // 카톡 실패 → 계정 로그인으로 fallback
-                    loginWithKakaoAccountFallback()
-                }
+            UserApiClient.instance.loginWithKakaoTalk(this) { token, _ ->
+                if (token != null) postAccessTokenToServer(token.accessToken)
+                else loginWithKakaoAccountFallback()
             }
         } else {
             loginWithKakaoAccountFallback()
@@ -107,67 +165,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loginWithKakaoAccountFallback() {
-        UserApiClient.instance.loginWithKakaoAccount(this) { token, error ->
-            Log.d("KAKAO_LOGIN", "loginWithKakaoAccount token=${token != null}, error=$error")
-            if (token != null) {
-                ensureScopesThenPostToServer(token.accessToken)
-            } else {
-                Toast.makeText(this, "카카오 로그인 취소/실패", Toast.LENGTH_SHORT).show()
-            }
+        UserApiClient.instance.loginWithKakaoAccount(this) { token, _ ->
+            if (token != null) postAccessTokenToServer(token.accessToken)
+            else Toast.makeText(this, "카카오 로그인 취소/실패", Toast.LENGTH_SHORT).show()
         }
     }
 
-    /**
-     * ✅ 핵심:
-     * - me() 호출해서 email/profile 동의 필요 여부 확인
-     * - 필요하면 loginWithNewScopes로 “동의화면” 띄움
-     * - 최종 accessToken을 /app-login로 POST
-     */
-    private fun ensureScopesThenPostToServer(accessToken: String) {
-        UserApiClient.instance.me { user, error ->
-            if (error != null) {
-                Log.e("KAKAO_LOGIN", "me() error=$error")
-                // 그래도 일단 진행(서버가 최소 가입 처리하도록)
-                postAccessTokenToServer(accessToken)
-                return@me
-            }
-
-            val scopes = mutableListOf<String>()
-
-            // ✅ 카카오 SDK가 동의 필요 여부를 이렇게 내려줌(없으면 false/null)
-            val acc = user?.kakaoAccount
-            if (acc?.emailNeedsAgreement == true) scopes += "account_email"
-            if (acc?.profileNeedsAgreement == true) {
-                scopes += "profile_nickname"
-                scopes += "profile_image"
-            }
-
-            if (scopes.isEmpty()) {
-                // 이미 동의되어 있음 → 바로 서버로
-                postAccessTokenToServer(accessToken)
-                return@me
-            }
-
-            Log.d("KAKAO_LOGIN", "need scopes=$scopes")
-
-            // ✅ 여기서 “동의 화면”이 떠야 정상
-            UserApiClient.instance.loginWithNewScopes(this, scopes) { newToken, scopeError ->
-                Log.d("KAKAO_LOGIN", "loginWithNewScopes token=${newToken != null}, error=$scopeError")
-
-                if (newToken != null) {
-                    postAccessTokenToServer(newToken.accessToken)
-                } else {
-                    Toast.makeText(this, "동의가 필요합니다(취소됨)", Toast.LENGTH_SHORT).show()
-                    // 취소해도 최소 진행 원하면 아래 주석 해제:
-                    // postAccessTokenToServer(accessToken)
-                }
-            }
-        }
-    }
-
-    /**
-     * ✅ WP 서버로 access_token POST → 서버가 WP 쿠키 발급 → afterLoginUrl로 redirect 해야 함
-     */
     private fun postAccessTokenToServer(accessToken: String) {
         try {
             val postData =
@@ -181,71 +184,170 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * ✅ 하단 배너: Adaptive Banner
-     * - “adSize는 1번만 set 가능” 크래시 방지 (bannerSizedOnce 플래그)
-     */
+    // ===== Banner (Adaptive) =====
     private fun setupAdMobAdaptiveBanner() {
         MobileAds.initialize(this)
 
         val container = bannerContainer ?: return
         container.visibility = View.VISIBLE
 
-        // 이미 만들어져 있으면 정리
-        bannerAdView?.destroy()
+        // 정리
+        try { bannerAdView?.destroy() } catch (_: Exception) {}
         bannerAdView = null
         bannerSizedOnce = false
+        bannerRetryCount = 0
 
         val adView = AdView(this)
         adView.adUnitId = bannerUnitId
+
+        adView.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                Log.d("ADMOB_BANNER", "Banner loaded ✅")
+            }
+
+            override fun onAdFailedToLoad(adError: LoadAdError) {
+                Log.e("ADMOB_BANNER", "Banner failed ❌ : $adError")
+            }
+        }
+
         container.removeAllViews()
         container.addView(adView)
         bannerAdView = adView
 
-        // 레이아웃이 실제 너비를 가진 뒤에 adSize 계산
-        globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
-            if (bannerSizedOnce) return@OnGlobalLayoutListener
-
+        fun tryLoadWhenReady() {
             val widthPx = container.width
-            if (widthPx <= 0) return@OnGlobalLayoutListener
+            if (widthPx <= 0) {
+                if (bannerRetryCount < 12) {
+                    bannerRetryCount++
+                    container.postDelayed({ tryLoadWhenReady() }, 120)
+                } else {
+                    Log.e("ADMOB_BANNER", "container width still 0 after retries")
+                }
+                return
+            }
 
-            bannerSizedOnce = true
-            try {
-                // listener 제거(중복 호출 방지)
-                container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener)
-            } catch (_: Exception) {}
+            if (bannerSizedOnce) return
 
             val dm: DisplayMetrics = resources.displayMetrics
             val adWidth = (widthPx / dm.density).toInt()
             val adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth)
 
-            // ✅ adSize는 “한 번만” 세팅해야 함 (이거 때문에 크래시 났던 거)
+            Log.d("ADMOB_BANNER", "Request size: adWidth=$adWidth, adSize=$adSize")
+
+            bannerSizedOnce = true
             adView.setAdSize(adSize)
-
-            adView.adListener = object : AdListener() {
-                override fun onAdFailedToLoad(adError: com.google.android.gms.ads.LoadAdError) {
-                    Log.e("ADMOB", "Banner failed: $adError")
-                }
-            }
-
             adView.loadAd(AdRequest.Builder().build())
         }
 
+        globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+            if (!bannerSizedOnce) tryLoadWhenReady()
+            if (bannerSizedOnce) {
+                try { container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener) } catch (_: Exception) {}
+            }
+        }
+
         container.viewTreeObserver.addOnGlobalLayoutListener(globalLayoutListener)
+        container.post { tryLoadWhenReady() }
+    }
+
+    // ===== Exit Native preload =====
+    private fun preloadExitNativeAd() {
+        val loader = AdLoader.Builder(this, exitNativeUnitId)
+            .forNativeAd { ad ->
+                exitNativeAd?.destroy()
+                exitNativeAd = ad
+                Log.d("ADMOB_NATIVE", "Exit native loaded ✅")
+            }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    Log.e("ADMOB_NATIVE", "Exit native failed ❌ : $adError")
+                }
+            })
+            .build()
+
+        loader.loadAd(AdRequest.Builder().build())
+    }
+
+    // ===== Exit Dialog =====
+    private fun showExitDialog() {
+        if (exitDialog?.isShowing == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_exit, null)
+
+        view.findViewById<TextView>(R.id.btnCancel).setOnClickListener {
+            exitDialog?.dismiss()
+        }
+        view.findViewById<TextView>(R.id.btnExit).setOnClickListener {
+            finish()
+        }
+
+        val adContainer = view.findViewById<FrameLayout>(R.id.nativeAdContainer)
+
+        exitNativeAd?.let { ad ->
+            val adView = layoutInflater.inflate(
+                R.layout.native_ad_exit,
+                adContainer,
+                false
+            ) as NativeAdView
+
+            val mediaView = adView.findViewById<com.google.android.gms.ads.nativead.MediaView>(R.id.adMedia)
+            val iconView = adView.findViewById<android.widget.ImageView>(R.id.adIcon)
+            val headlineView = adView.findViewById<TextView>(R.id.adHeadline)
+            val bodyView = adView.findViewById<TextView>(R.id.adBody)
+            val ctaBtn = adView.findViewById<android.widget.Button>(R.id.adCta)
+
+            // 매핑(정석)
+            adView.mediaView = mediaView
+
+            adView.headlineView = headlineView
+            headlineView.text = ad.headline ?: ""
+
+            if (ad.body.isNullOrBlank()) {
+                bodyView.visibility = View.GONE
+            } else {
+                bodyView.visibility = View.VISIBLE
+                adView.bodyView = bodyView
+                bodyView.text = ad.body
+            }
+
+            if (ad.callToAction.isNullOrBlank()) {
+                ctaBtn.visibility = View.GONE
+            } else {
+                ctaBtn.visibility = View.VISIBLE
+                adView.callToActionView = ctaBtn
+                ctaBtn.text = ad.callToAction
+            }
+
+            val icon = ad.icon
+            if (icon?.drawable == null) {
+                iconView.visibility = View.GONE
+            } else {
+                iconView.visibility = View.VISIBLE
+                adView.iconView = iconView
+                iconView.setImageDrawable(icon.drawable)
+            }
+
+            // 마지막에 setNativeAd
+            adView.setNativeAd(ad)
+
+            adContainer.removeAllViews()
+            adContainer.addView(adView)
+        }
+
+        exitDialog = AlertDialog.Builder(this)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        exitDialog?.show()
     }
 
     override fun onDestroy() {
+        try { bannerAdView?.destroy() } catch (_: Exception) {}
+        try { exitNativeAd?.destroy() } catch (_: Exception) {}
         try {
-            bannerAdView?.destroy()
-            bannerAdView = null
+            if (::webView.isInitialized) webView.stopLoading()
         } catch (_: Exception) {}
-
-        try {
-            if (::webView.isInitialized) {
-                webView.stopLoading()
-            }
-        } catch (_: Exception) {}
-
         super.onDestroy()
     }
 }
